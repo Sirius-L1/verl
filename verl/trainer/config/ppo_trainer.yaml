@@ -259,10 +259,10 @@ trainer:
   log_val_generations: 1
 
   # Directory for logging rollout data; no dump if null
-  rollout_data_dir: checkpoints/${trainer.project_name}/${trainer.experiment_name}/rollout_data
+  rollout_data_dir: ../checkpoints/${trainer.project_name}/${trainer.experiment_name}/rollout_data
 
   # Directory for logging validation data; no dump if null
-  validation_data_dir: checkpoints/${trainer.project_name}/${trainer.experiment_name}/validation_data
+  validation_data_dir: ../checkpoints/${trainer.project_name}/${trainer.experiment_name}/validation_data
 
   # Number of nodes used in the training
   nnodes: 1
@@ -308,7 +308,7 @@ trainer:
   del_local_ckpt_after_load: False
 
   # Default local directory for saving checkpoints
-  default_local_dir: checkpoints/${trainer.project_name}/${trainer.experiment_name}
+  default_local_dir: ../checkpoints/${trainer.project_name}/${trainer.experiment_name}
 
   # Maximum number of actor checkpoints to keep
   max_actor_ckpt_to_keep: null
