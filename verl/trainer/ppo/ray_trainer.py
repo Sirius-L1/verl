@@ -695,7 +695,11 @@ class RayPPOTrainer:
         sample_inputs = []
         sample_outputs = []
         sample_scores = []
+<<<<<<< HEAD
         sample_turns = []
+=======
+>>>>>>> 0d16952 (feat: implement reward functions for point and bbox detection tasks)
+        all_extra_infos = []
 
         for test_data in self.val_dataloader:
             test_batch = DataProto.from_single_dict(test_data)
@@ -714,6 +718,12 @@ class RayPPOTrainer:
             # TODO: Can we keep special tokens except for padding tokens?
             input_texts = [self.tokenizer.decode(ids, skip_special_tokens=True) for ids in input_ids]
             sample_inputs.extend(input_texts)
+
+            batch_extra_infos = test_batch.non_tensor_batch.get("extra_info")
+            if batch_extra_infos:
+                all_extra_infos.extend(batch_extra_infos)
+            else:
+                all_extra_infos.extend([None] * len(input_texts))
 
             batch_keys_to_pop = ["input_ids", "attention_mask", "position_ids"]
             non_tensor_batch_keys_to_pop = ["raw_prompt_ids"]
@@ -803,7 +813,18 @@ class RayPPOTrainer:
 
         data_sources = np.concatenate(data_source_lst, axis=0)
 
-        data_src2var2metric2val = process_validation_metrics(data_sources, sample_inputs, reward_extra_infos_dict)
+        # Try to use sample index as unique keys for validation metrics.
+        # The index is located in `test_batch.non_tensor_batch.get("extra_info")`.
+        sample_keys = []
+        for i, sample in enumerate(sample_inputs):
+            try:
+                # all_extra_infos is a list of dicts or Nones, aligned with samples.
+                sample_keys.append(str(all_extra_infos[i]["index"]))
+            except (TypeError, KeyError, IndexError):
+                # Fallback to the original sample if index cannot be retrieved.
+                sample_keys.append(sample)
+        data_src2var2metric2val = process_validation_metrics(data_sources, sample_keys, reward_extra_infos_dict)
+        
         metric_dict = {}
         for data_source, var2metric2val in data_src2var2metric2val.items():
             core_var = "acc" if "acc" in var2metric2val else "reward"
