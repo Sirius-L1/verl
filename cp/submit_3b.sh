@@ -91,8 +91,8 @@ set -x
 
 python3 -m verl.trainer.main_ppo \
     algorithm.adv_estimator=grpo \
-    data.train_files=/lustre/projects/polyullm/yuhang/r2/verl/data/geo3k/train.parquet \
-    data.val_files=/lustre/projects/polyullm/yuhang/r2/verl/data/geo3k/test.parquet \
+    data.train_files=/lustre/projects/polyullm/yuhang/r2/data/train/ui_24k_0614_r1_grounding_point.parquet \
+    data.val_files=/lustre/projects/polyullm/yuhang/r2/data/validation/ui_24k_0614_r1_grounding_point.parquet \
     data.train_batch_size=512 \
     data.max_prompt_length=8192 \
     data.max_response_length=8192 \
