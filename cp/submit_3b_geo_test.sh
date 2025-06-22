@@ -1,0 +1,167 @@
+#!/bin/bash
+#SBATCH --job-name=ui-verl
+#SBATCH --nodes=1
+#SBATCH --ntasks-per-node=1
+#SBATCH --mem=1024G
+#SBATCH --partition=AISS2025031801
+#SBATCH --account=polyullm
+#SBATCH --gpus-per-node=8
+#SBATCH --cpus-per-task=128
+#SBATCH --output=/lustre/projects/polyullm/yuhang/r2/logs/test-%j.out
+#SBATCH --error=/lustre/projects/polyullm/yuhang/r2/logs/test-%j.err
+
+# set -x
+
+# replace these information with your own
+verl_workdir=/lustre/projects/polyullm/yuhang/r2/verl
+container_image=/lustre/projects/polyullm/container/verl+cu126+0503.sqsh
+container_name=verl+cu126+0503
+container_mounts=/lustre/projects/polyullm:/lustre/projects/polyullm,/home/projects/polyullm:/home/projects/polyullm
+# replace these information with your own
+
+# Getting the node names
+nodes=$(scontrol show hostnames "$SLURM_JOB_NODELIST")
+nodes_array=($nodes)
+
+# Get the IP address of the head node
+head_node=${nodes_array[0]}
+head_node_ip=$(srun --nodes=1 --ntasks=1 -w "$head_node" hostname --ip-address)
+
+# Start Ray head node
+port=6379
+ip_head=$head_node_ip:$port
+export ip_head
+echo "IP Head: $ip_head"
+
+# make sure we set environment variables before Ray initialization
+export VLLM_ATTENTION_BACKEND=XFORMERS
+export WANDB_MODE=offline
+export HOME=$verl_workdir
+
+printenv
+
+echo "Starting HEAD at $head_node"
+srun --nodes=1 --ntasks=1 -w "$head_node" \
+    --container-name=$container_name \
+    --container-mounts=$container_mounts \
+    --container-image=$container_image \
+    --container-workdir=$verl_workdir \
+    --container-writable \
+    bash -c "ray start --head --node-ip-address=$head_node_ip --port=$port --num-cpus $SLURM_CPUS_PER_TASK --num-gpus $SLURM_GPUS_PER_NODE --block" &
+
+echo "Waiting for Ray head node to be ready..."
+max_retries=120
+for ((i=1; i<=max_retries; i++)); do
+    if nc -z $head_node_ip $port >/dev/null 2>&1; then
+        sleep 3
+        echo "Ray head node port is available after $i seconds!"
+        break
+    fi
+    
+    echo "Attempt $i/$max_retries: Head node port not ready yet..."
+    sleep 1
+    
+    if [ $i -eq $max_retries ]; then
+        echo "Error: Ray head node failed to start within $max_retries seconds"
+        exit 1
+    fi
+done
+# sleep 60
+
+# number of nodes other than the head node
+worker_num=$((SLURM_JOB_NUM_NODES - 1))
+
+for ((i = 1; i <= worker_num; i++)); do
+    node_i=${nodes_array[$i]}
+    echo "Starting WORKER $i at $node_i"
+    srun --nodes=1 --ntasks=1 -w "$node_i" \
+        --container-name=$container_name \
+        --container-mounts=$container_mounts \
+        --container-image=$container_image \
+        --container-workdir=$verl_workdir \
+        --container-writable \
+        bash -c "ray start --address $ip_head --num-cpus $SLURM_CPUS_PER_TASK --num-gpus $SLURM_GPUS_PER_NODE --block" &
+    sleep 5
+done
+
+sleep 10
+
+SCRIPTS="
+set -x
+
+python3 -m verl.trainer.main_ppo \
+    algorithm.adv_estimator=grpo \
+    data.train_files=/lustre/projects/polyullm/yuhang/r2/verl/data/geo3k/train.parquet \
+    data.val_files=/lustre/projects/polyullm/yuhang/r2/verl/data/geo3k/test.parquet \
+    data.train_batch_size=512 \
+    data.max_prompt_length=1024 \
+    data.max_response_length=2048 \
+    data.filter_overlong_prompts=True \
+    data.truncation='error' \
+    data.image_key=images \
+    actor_rollout_ref.model.path=/lustre/projects/polyullm/models/Qwen/Qwen2.5-VL-3B-Instruct \
+    actor_rollout_ref.actor.optim.lr=1e-6 \
+    actor_rollout_ref.model.use_remove_padding=True \
+    actor_rollout_ref.actor.ppo_mini_batch_size=128 \
+    actor_rollout_ref.actor.ppo_micro_batch_size_per_gpu=10 \
+    actor_rollout_ref.actor.use_kl_loss=True \
+    actor_rollout_ref.actor.kl_loss_coef=0.01 \
+    actor_rollout_ref.actor.kl_loss_type=low_var_kl \
+    actor_rollout_ref.actor.entropy_coeff=0 \
+    actor_rollout_ref.model.enable_gradient_checkpointing=True \
+    actor_rollout_ref.actor.fsdp_config.param_offload=False \
+    actor_rollout_ref.actor.fsdp_config.optimizer_offload=False \
+    actor_rollout_ref.rollout.log_prob_micro_batch_size_per_gpu=20 \
+    actor_rollout_ref.rollout.tensor_model_parallel_size=2 \
+    actor_rollout_ref.rollout.name=vllm \
+    actor_rollout_ref.rollout.gpu_memory_utilization=0.6 \
+    actor_rollout_ref.rollout.enable_chunked_prefill=False \
+    actor_rollout_ref.rollout.enforce_eager=False \
+    actor_rollout_ref.rollout.free_cache_engine=False \
+    actor_rollout_ref.rollout.n=5 \
+    actor_rollout_ref.ref.log_prob_micro_batch_size_per_gpu=20 \
+    actor_rollout_ref.ref.fsdp_config.param_offload=True \
+    algorithm.use_kl_in_reward=False \
+    trainer.critic_warmup=0 \
+    trainer.logger=['console','wandb'] \
+    trainer.project_name='verl_grpo_example_geo3k' \
+    trainer.experiment_name='qwen2_5_vl_7b_function_rm' \
+    trainer.n_gpus_per_node=8 \
+    trainer.nnodes=$SLURM_JOB_NUM_NODES \
+    trainer.save_freq=20 \
+    trainer.test_freq=5 \
+    trainer.total_epochs=15 $@
+"
+
+PYTHONUNBUFFERED=1 srun --overlap --nodes=1 --ntasks=1 -w "$head_node" \
+    --container-name=$container_name \
+    --container-mounts=$container_mounts \
+    --container-image=$container_image \
+    --container-workdir=$verl_workdir \
+    --container-writable \
+    bash -c "ray status ; $SCRIPTS"
+
+
+# Clean up Ray processes
+cleanup() {
+    echo "Shutting down Ray cluster..."
+    srun --overlap --nodes=1 --ntasks=1 -w "$head_node" \
+        --container-name=$container_name \
+        --container-mounts=$container_mounts \
+        --container-image=$container_image \
+        --container-writable \
+        bash -c "ray stop"
+    
+    for ((i = 1; i <= worker_num; i++)); do
+        node_i=${nodes_array[$i]}
+        srun --overlap --nodes=1 --ntasks=1 -w "$node_i" \
+            --container-name=$container_name \
+            --container-mounts=$container_mounts \
+            --container-image=$container_image \
+            --container-writable \
+            bash -c "ray stop"
+    done
+}
+
+# Set up trap to call cleanup function on script exit
+trap cleanup EXIT

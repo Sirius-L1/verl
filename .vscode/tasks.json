@@ -1,0 +1,17 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+      {
+        "label": "Git: Archive Branch with Dynamic Name (tar.gz)",
+        "type": "shell",
+        "problemMatcher": [],
+        "detail": "将当前分支打包为 {项目名}-{分支名}-{日期}.tar.gz",
+        "windows": {
+          "command": "git archive --format=tar HEAD | gzip > \"${workspaceFolderBasename}-$(git rev-parse --abbrev-ref HEAD)-$(Get-Date -Format 'yyMMdd').tar.gz\""
+        },
+        "linux": {
+          "command": "git archive --format=tar HEAD | gzip > \"${workspaceFolderBasename}-$(git rev-parse --abbrev-ref HEAD)-$(date +%y%m%d).tar.gz\""
+        }
+      }
+    ]
+  }
