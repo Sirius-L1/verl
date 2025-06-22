@@ -93,7 +93,7 @@ python3 -m verl.trainer.main_ppo \
     algorithm.adv_estimator=grpo \
     data.train_files=/lustre/projects/polyullm/yuhang/r2/verl/data/geo3k/train.parquet \
     data.val_files=/lustre/projects/polyullm/yuhang/r2/verl/data/geo3k/test.parquet \
-    data.train_batch_size=128 \
+    data.train_batch_size=512 \
     data.max_prompt_length=8192 \
     data.max_response_length=8192 \
     data.filter_overlong_prompts=True \
@@ -105,7 +105,7 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.actor.optim.lr=1e-6 \
     actor_rollout_ref.actor.optim.lr_warmup_steps=10 \
     actor_rollout_ref.model.use_remove_padding=True \
-    actor_rollout_ref.actor.ppo_mini_batch_size=128 \
+    actor_rollout_ref.actor.ppo_mini_batch_size=32 \
     actor_rollout_ref.actor.ppo_micro_batch_size_per_gpu=8 \
     actor_rollout_ref.actor.clip_ratio_high=0.4 \
     actor_rollout_ref.actor.use_kl_loss=False \
