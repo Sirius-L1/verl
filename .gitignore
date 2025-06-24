@@ -124,6 +124,3 @@ logs
 log
 outputs
 .history
-
-# deprecated
-cp/**/deprecated/**
