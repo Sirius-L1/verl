@@ -1,4 +1,6 @@
 import re
+import os
+import json
 from typing import Union, Dict
 
 def extract_think_format(predict_str: str) -> Union[None, Dict[str, str]]:
