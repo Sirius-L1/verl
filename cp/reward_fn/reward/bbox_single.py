@@ -1,6 +1,20 @@
 import logging
+import json
 
 from .utils import extract_think_format, extract_and_parse_json, calculate_iou
+
+def _extract_verifiable_answer(answer):
+    bbox = extract_and_parse_json(answer, "{}")
+    if bbox is None or "bbox_2d" not in bbox:
+        return None
+    
+    bbox_2d = bbox["bbox_2d"]
+    if len(bbox_2d) != 4:
+        return None
+    if bbox_2d[0] >= bbox_2d[2] or bbox_2d[1] >= bbox_2d[3]:
+        return None
+    
+    return bbox_2d
 
 def _format_reward(answer):
     """
@@ -11,25 +25,13 @@ def _format_reward(answer):
     Returns:
         float: The format reward.
     """
-    bbox = extract_and_parse_json(answer, "[]")
-    if bbox is None or len(bbox) != 1:
+    bbox = _extract_verifiable_answer(answer)
+    if bbox is None:
         return 0.0
-    
-    # 检查边界框的有效性：x1 < x2 且 y1 < y2
-    for bbox_item in bbox:
-        if "bbox_2d" not in bbox_item:
-            return 0.0
-            
-        bbox_2d = bbox_item["bbox_2d"]
-        if len(bbox_2d) != 4:
-            return 0.0
-            
-        if bbox_2d[0] >= bbox_2d[2] or bbox_2d[1] >= bbox_2d[3]:
-            return 0.0
     
     return 1.0
 
-def _accuracy_reward(answer, ground_truth, iou_threshold=0.7):
+def _accuracy_reward(answer, ground_truth, iou_threshold):
     """
     Calculates the accuracy reward for 'bbox' type data.
 
@@ -40,35 +42,26 @@ def _accuracy_reward(answer, ground_truth, iou_threshold=0.7):
         float: The accuracy reward.
     """
     # 提取预测的边界框
-    pred_bbox = extract_and_parse_json(answer, "[]")
+    pred_bbox = _extract_verifiable_answer(answer)
     
-    if pred_bbox is None or len(pred_bbox) != 1:
-        return 0.0
+    if pred_bbox is None:
+        return 0.0, ""
     
     # 计算IoU
-    max_iou = 0.0
-    for bbox_item in pred_bbox:
-        pred_bbox_2d = bbox_item["bbox_2d"]
-        pred_box = {
-            "x1": pred_bbox_2d[0],
-            "y1": pred_bbox_2d[1],
-            "x2": pred_bbox_2d[2],
-            "y2": pred_bbox_2d[3]
-        }
-        
-        iou = calculate_iou(pred_box, ground_truth)
-        max_iou = max(max_iou, iou)
+    bbox = {
+        "x1": pred_bbox[0],
+        "y1": pred_bbox[1],
+        "x2": pred_bbox[2],
+        "y2": pred_bbox[3]
+    }
+    extracted_answer = json.dumps(pred_bbox)
     
-    try:
-        extracted_answer = pred_bbox[0]["bbox_2d"]
-    except Exception as e:
-        extracted_answer = None
+    iou = calculate_iou(bbox, ground_truth)
     
-    # 根据IoU计算得分
-    if max_iou >= iou_threshold:
+    if iou >= iou_threshold:
         return 1.0, extracted_answer
     else:
-        return max_iou / iou_threshold, extracted_answer
+        return iou / iou_threshold, extracted_answer
 
 def calculate_reward(solution_str, ground_truth, extra_info=None, fmt_ratio=0.1, acc_ratio=0.9, **kwargs):
     """
@@ -91,7 +84,7 @@ def calculate_reward(solution_str, ground_truth, extra_info=None, fmt_ratio=0.1,
             "score": 0.0,
             "format": 0.0,
             "accuracy": 0.0,
-            "pred": None
+            "pred": ""
         }
     thinking = solution_dict["think"]
     answer = solution_dict["answer"]
@@ -102,10 +95,10 @@ def calculate_reward(solution_str, ground_truth, extra_info=None, fmt_ratio=0.1,
             "score": 0.0,
             "format": 0.0,
             "accuracy": 0.0,
-            "pred": None
+            "pred": ""
         }
     
-    accuracy_reward, extracted_answer = _accuracy_reward(answer, ground_truth)
+    accuracy_reward, extracted_answer = _accuracy_reward(answer, ground_truth, iou_threshold=kwargs.get("iou_threshold", 0.7))
     
     return {
         "score": fmt_ratio * format_reward + acc_ratio * accuracy_reward,
