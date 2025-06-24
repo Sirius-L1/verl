@@ -401,6 +401,8 @@ def process_validation_metrics(
 
                 if n_resps > 1:
                     metric[f"std@{n_resps}"] = np.std(var_vals)
+                    metric[f"best@{n_resps}"] = np.max(var_vals)
+                    metric[f"worst@{n_resps}"] = np.min(var_vals)
 
                     ns = []
                     n = 2
@@ -486,7 +488,7 @@ def compute_training_metrics(batch: DataProto, reward_extra_infos_dict: dict[str
         for var_name, metric2val in var2metric2val.items():
             n_max = max([int(name.split('@')[-1].split('/')[0]) for name in metric2val.keys()])
             for metric_name, metric_val in metric2val.items():
-                if (var_name == core_var) and any(metric_name.startswith(pfx) for pfx in ['mean', 'maj', 'best']) and (f'@{n_max}' in metric_name):
+                if not (metric_name.endswith("std") or metric_name.endswith("mean")):
                     metric_sec = 'train-core'
                 else:
                     metric_sec = 'train-aux'

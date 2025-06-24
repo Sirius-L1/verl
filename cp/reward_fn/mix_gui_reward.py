@@ -58,7 +58,7 @@ def mix_gui_reward_function(data_source, solution_str, ground_truth, extra_info=
                 "score": 0.0,
                 "format": 0.0,
                 "accuracy": 0.0,
-                "pred": None
+                "pred": ""
             }  # Return a default penalty score on error
     else:
         raise ValueError(f"Unknown data_source: '{data_source}'. No specific reward handler defined.")
