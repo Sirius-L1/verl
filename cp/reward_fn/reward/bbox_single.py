@@ -59,11 +59,16 @@ def _accuracy_reward(answer, ground_truth, iou_threshold=0.7):
         iou = calculate_iou(pred_box, ground_truth)
         max_iou = max(max_iou, iou)
     
+    try:
+        extracted_answer = pred_bbox[0]["bbox_2d"]
+    except Exception as e:
+        extracted_answer = None
+    
     # 根据IoU计算得分
     if max_iou >= iou_threshold:
-        return 1.0
+        return 1.0, extracted_answer
     else:
-        return max_iou / iou_threshold
+        return max_iou / iou_threshold, extracted_answer
 
 def calculate_reward(solution_str, ground_truth, extra_info=None, fmt_ratio=0.1, acc_ratio=0.9, **kwargs):
     """
@@ -82,18 +87,29 @@ def calculate_reward(solution_str, ground_truth, extra_info=None, fmt_ratio=0.1,
     """
     solution_dict = extract_think_format(solution_str)
     if solution_dict is None:
-        return 0.0
+        return {
+            "score": 0.0,
+            "format": 0.0,
+            "accuracy": 0.0,
+            "pred": None
+        }
     thinking = solution_dict["think"]
     answer = solution_dict["answer"]
     
     format_reward = _format_reward(answer)
     if format_reward == 0.0:
-        return 0.0
+        return {
+            "score": 0.0,
+            "format": 0.0,
+            "accuracy": 0.0,
+            "pred": None
+        }
     
-    accuracy_reward = _accuracy_reward(answer, ground_truth)
+    accuracy_reward, extracted_answer = _accuracy_reward(answer, ground_truth)
     
     return {
         "score": fmt_ratio * format_reward + acc_ratio * accuracy_reward,
         "format": format_reward,
-        "accuracy": accuracy_reward
+        "accuracy": accuracy_reward,
+        "pred": extracted_answer
     }

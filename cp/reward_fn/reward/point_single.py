@@ -57,11 +57,16 @@ def _accuracy_reward(answer, ground_truth):
             ground_truth["y1"] <= y <= ground_truth["y2"]):
             points_in_bbox += 1
     
+    try:
+        extracted_answer = pred_point[0]["point_2d"]
+    except Exception as e:
+        extracted_answer = None
+
     # 计算得分
     if points_in_bbox > 0:
-        return 1.0
+        return 1.0, extracted_answer
     else:
-        return 0.0
+        return 0.0, extracted_answer
 
 def calculate_reward(solution_str, ground_truth, extra_info=None, fmt_ratio=0.1, acc_ratio=0.9, **kwargs):
     """
@@ -80,18 +85,29 @@ def calculate_reward(solution_str, ground_truth, extra_info=None, fmt_ratio=0.1,
     """
     solution_dict = extract_think_format(solution_str)
     if solution_dict is None:
-        return 0.0
+        return {
+            "score": 0.0,
+            "format": 0.0,
+            "accuracy": 0.0,
+            "pred": None
+        }
     thinking = solution_dict["think"]
     answer = solution_dict["answer"]
     
     format_reward = _format_reward(answer)
     if format_reward == 0.0:
-        return 0.0
+        return {
+            "score": 0.0,
+            "format": 0.0,
+            "accuracy": 0.0,
+            "pred": None
+        }
     
-    accuracy_reward = _accuracy_reward(answer, ground_truth)
+    accuracy_reward, extracted_answer = _accuracy_reward(answer, ground_truth)
     
     return {
         "score": fmt_ratio * format_reward + acc_ratio * accuracy_reward,
         "format": format_reward,
-        "accuracy": accuracy_reward
+        "accuracy": accuracy_reward,
+        "pred": extracted_answer
     }

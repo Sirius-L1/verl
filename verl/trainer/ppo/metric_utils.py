@@ -442,3 +442,55 @@ def process_validation_metrics(
                 data_src2var2metric2val[data_source][var_name][metric_name] = np.mean(prompt_vals)
 
     return data_src2var2metric2val
+
+
+def compute_training_metrics(batch: DataProto, reward_extra_infos_dict: dict[str, list] = None) -> dict[str, float]:
+    """
+    Process training metrics into a structured format similar to validation metrics.
+    
+    This function extracts and organizes training metrics from the batch data 
+    and reward extra info dictionary, to be used for monitoring training progress.
+    
+    Args:
+        batch: A DataProto object containing batch data with UID information
+        reward_extra_infos_dict: Dictionary with additional reward metrics information
+        
+    Returns:
+        A dictionary containing training metrics with prefixes 'train-core' and 'train-aux'
+    """
+    if reward_extra_infos_dict is None or len(reward_extra_infos_dict) == 0:
+        return {}
+    
+    # Get data sources from the batch if available, otherwise use 'unknown'
+    data_sources = []
+    if 'data_source' in batch.non_tensor_batch:
+        data_sources = batch.non_tensor_batch['data_source']
+    else:
+        data_sources = ['unknown'] * len(batch.batch)
+    
+    # Use UIDs as sample keys for uniqueness
+    sample_keys = []
+    if 'uid' in batch.non_tensor_batch:
+        sample_keys = batch.non_tensor_batch['uid'].tolist()
+    else:
+        # Fallback to indices if UIDs are not available
+        sample_keys = [str(i) for i in range(len(batch.batch))]
+    
+    # Process the metrics using the validation metrics processor
+    data_src2var2metric2val = process_validation_metrics(data_sources, sample_keys, reward_extra_infos_dict)
+    
+    # Convert the nested dictionary to a flat dictionary with appropriate prefixes
+    metric_dict = {}
+    for data_source, var2metric2val in data_src2var2metric2val.items():
+        core_var = 'acc' if 'acc' in var2metric2val else 'reward'
+        for var_name, metric2val in var2metric2val.items():
+            n_max = max([int(name.split('@')[-1].split('/')[0]) for name in metric2val.keys()])
+            for metric_name, metric_val in metric2val.items():
+                if (var_name == core_var) and any(metric_name.startswith(pfx) for pfx in ['mean', 'maj', 'best']) and (f'@{n_max}' in metric_name):
+                    metric_sec = 'train-core'
+                else:
+                    metric_sec = 'train-aux'
+                pfx = f'{metric_sec}/{data_source}/{var_name}/{metric_name}'
+                metric_dict[pfx] = metric_val
+    
+    return metric_dict

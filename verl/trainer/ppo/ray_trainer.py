@@ -49,6 +49,7 @@ from verl.trainer.ppo.metric_utils import (
     compute_data_metrics,
     compute_throughout_metrics,
     compute_timing_metrics,
+    compute_training_metrics,
     process_validation_metrics,
 )
 from verl.trainer.ppo.reward import compute_reward, compute_reward_async
@@ -720,7 +721,7 @@ class RayPPOTrainer:
             sample_inputs.extend(input_texts)
 
             batch_extra_infos = test_batch.non_tensor_batch.get("extra_info")
-            if batch_extra_infos:
+            if batch_extra_infos is not None and len(batch_extra_infos) > 0:
                 all_extra_infos.extend(batch_extra_infos)
             else:
                 all_extra_infos.extend([None] * len(input_texts))
@@ -1408,6 +1409,8 @@ class RayPPOTrainer:
                 # collect metrics
                 metrics.update(compute_data_metrics(batch=batch, use_critic=self.use_critic))
                 metrics.update(compute_timing_metrics(batch=batch, timing_raw=timing_raw))
+                # Add training metrics similar to validation metrics but with train prefixes
+                metrics.update(compute_training_metrics(batch=batch, reward_extra_infos_dict=reward_extra_infos_dict))
                 # TODO: implement actual tflpo and theoretical tflpo
                 n_gpus = self.resource_pool_manager.get_n_gpus()
                 metrics.update(compute_throughout_metrics(batch=batch, timing_raw=timing_raw, n_gpus=n_gpus))
