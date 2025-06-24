@@ -1,8 +1,9 @@
 import logging
 
 try:
-    from .reward import point_single as point_reward
-    from .reward import bbox_single as bbox_reward
+    # Change from relative imports to absolute imports
+    from cp.reward_fn.reward import point_single as point_reward
+    from cp.reward_fn.reward import bbox_single as bbox_reward
 except ImportError as e:
     logging.error(f"Error importing reward modules: {e}. Ensure __init__.py files exist and relative paths are correct.")
     raise e
@@ -17,9 +18,14 @@ REWARD_HANDLERS = {
     "bbox": bbox_reward.calculate_reward,
     # TODO: Add more handlers as you create them
     # "new_type": new_type_reward_module.calculate_reward,
+    
+    # ========= validation set reward ========
+    "ss2": point_reward.calculate_reward,
+    "ssp": point_reward.calculate_reward,
+    "osg": point_reward.calculate_reward,
 }
 
-def mix_test_reward_function(data_source, solution_str, ground_truth, extra_info=None, **kwargs):
+def mix_gui_reward_function(data_source, solution_str, ground_truth, extra_info=None, **kwargs):
     """
     Main reward function dispatcher for the 'cyber' project.
     Delegates reward calculation to specific functions based on the data_source using a dictionary lookup.
@@ -48,7 +54,12 @@ def mix_test_reward_function(data_source, solution_str, ground_truth, extra_info
             )
         except Exception as e:
             logging.error(f"Error executing reward handler for data_source '{data_source}': {e}", exc_info=True)
-            return 0.0  # Return a default penalty score on error
+            return {
+                "score": 0.0,
+                "format": 0.0,
+                "accuracy": 0.0,
+                "pred": None
+            }  # Return a default penalty score on error
     else:
         raise ValueError(f"Unknown data_source: '{data_source}'. No specific reward handler defined.")
 
