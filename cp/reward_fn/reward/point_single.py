@@ -1,6 +1,18 @@
 import logging
+import json
 
 from .utils import extract_think_format, extract_and_parse_json
+
+def _extract_verifiable_answer(answer):
+    point = extract_and_parse_json(answer, "{}")
+    if point is None or "point_2d" not in point:
+        return None
+    
+    point_2d = point["point_2d"]
+    if len(point_2d) != 2:
+        return None
+    
+    return point_2d
 
 def _format_reward(answer):
     """
@@ -11,17 +23,9 @@ def _format_reward(answer):
     Returns:
         float: The format reward.
     """
-    point = extract_and_parse_json(answer, "[]")
-    if point is None or len(point) != 1:
+    point = _extract_verifiable_answer(answer)
+    if point is None:
         return 0.0
-    
-    for point_item in point:
-        if "point_2d" not in point_item:
-            return 0.0
-            
-        point_2d = point_item["point_2d"]
-        if len(point_2d) != 2:
-            return 0.0
     
     return 1.0
 
@@ -35,38 +39,19 @@ def _accuracy_reward(answer, ground_truth):
     Returns:
         float: The accuracy reward.
     """
-    pred_point = extract_and_parse_json(answer, "[]")
+    pred_point = _extract_verifiable_answer(answer)
     
-    if pred_point is None or len(pred_point) != 1:
-        return 0.0
+    if pred_point is None:
+        return 0.0, ""
     
-    # 计算每个预测点是否在框内
-    points_in_bbox = 0
-    for point_item in pred_point:
-        if "point_2d" not in point_item:
-            continue
-            
-        point = point_item["point_2d"]
-        if len(point) != 2:
-            continue
-            
-        x, y = point
-        
-        # 检查点是否在边界框内
-        if (ground_truth["x1"] <= x <= ground_truth["x2"] and 
-            ground_truth["y1"] <= y <= ground_truth["y2"]):
-            points_in_bbox += 1
+    x, y = pred_point
+    extracted_answer = json.dumps(pred_point)
     
-    try:
-        extracted_answer = pred_point[0]["point_2d"]
-    except Exception as e:
-        extracted_answer = None
-
-    # 计算得分
-    if points_in_bbox > 0:
+    if (ground_truth["x1"] <= x <= ground_truth["x2"] and 
+        ground_truth["y1"] <= y <= ground_truth["y2"]):
         return 1.0, extracted_answer
-    else:
-        return 0.0, extracted_answer
+    
+    return 0.0, extracted_answer
 
 def calculate_reward(solution_str, ground_truth, extra_info=None, fmt_ratio=0.1, acc_ratio=0.9, **kwargs):
     """
@@ -89,7 +74,7 @@ def calculate_reward(solution_str, ground_truth, extra_info=None, fmt_ratio=0.1,
             "score": 0.0,
             "format": 0.0,
             "accuracy": 0.0,
-            "pred": None
+            "pred": ""
         }
     thinking = solution_dict["think"]
     answer = solution_dict["answer"]
@@ -100,7 +85,7 @@ def calculate_reward(solution_str, ground_truth, extra_info=None, fmt_ratio=0.1,
             "score": 0.0,
             "format": 0.0,
             "accuracy": 0.0,
-            "pred": None
+            "pred": ""
         }
     
     accuracy_reward, extracted_answer = _accuracy_reward(answer, ground_truth)
