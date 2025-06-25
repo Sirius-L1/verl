@@ -1,14 +1,14 @@
 #!/bin/bash
 #SBATCH --job-name=ui-verl
-#SBATCH --nodes=2
+#SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --mem=1024G
 #SBATCH --partition=AISS2025031801
 #SBATCH --account=polyullm
 #SBATCH --gpus-per-node=8
 #SBATCH --cpus-per-task=128
-#SBATCH --output=/lustre/projects/polyullm/yuhang/r2/logs/policy_analysis/gui_on_policy-%j.out
-#SBATCH --error=/lustre/projects/polyullm/yuhang/r2/logs/policy_analysis/gui_on_policy-%j.err
+#SBATCH --output=/lustre/projects/polyullm/yuhang/r2/logs/on-policy_baseline/grpo_bsz64_n16-%j.out
+#SBATCH --error=/lustre/projects/polyullm/yuhang/r2/logs/on-policy_baseline/grpo_bsz64_n16-%j.err
 
 # set -x
 
@@ -95,7 +95,7 @@ python3 -m verl.trainer.main_ppo \
     algorithm.adv_estimator=grpo \
     data.train_files=/lustre/projects/polyullm/yuhang/r2/data/train/ui_24k_0614_r1_grounding_point.parquet \
     data.val_files=/lustre/projects/polyullm/yuhang/r2/data/validation/ui_r1_gui_grounding_val_50p_wrong_samples_from_3b.parquet \
-    data.train_batch_size=128 \
+    data.train_batch_size=64 \
     data.max_prompt_length=8192 \
     data.max_response_length=8192 \
     data.filter_overlong_prompts=True \
@@ -110,8 +110,8 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.actor.use_dynamic_bsz=True \
     actor_rollout_ref.actor.ppo_max_token_len_per_gpu=32768 \
     actor_rollout_ref.actor.optim.lr=1e-6 \
-    actor_rollout_ref.actor.optim.lr_warmup_steps=10 \
-    actor_rollout_ref.actor.ppo_mini_batch_size=128 \
+    actor_rollout_ref.actor.optim.lr_warmup_steps=0 \
+    actor_rollout_ref.actor.ppo_mini_batch_size=64 \
     actor_rollout_ref.actor.clip_ratio_high=0.4 \
     actor_rollout_ref.actor.use_kl_loss=False \
     actor_rollout_ref.actor.kl_loss_coef=0.001 \
@@ -136,12 +136,12 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.ref.fsdp_config.param_offload=True \
     algorithm.use_kl_in_reward=False \
     trainer.logger=['console','wandb'] \
-    trainer.project_name='policy_analysis' \
-    trainer.experiment_name='gui_on_policy' \
+    trainer.project_name='on-policy_baseline' \
+    trainer.experiment_name='grpo_bsz64_n16' \
     trainer.n_gpus_per_node=8 \
     trainer.nnodes=$SLURM_JOB_NUM_NODES \
-    trainer.save_freq=80 \
-    trainer.test_freq=40 \
+    trainer.save_freq=128 \
+    trainer.test_freq=64 \
     trainer.total_epochs=2
 "
 

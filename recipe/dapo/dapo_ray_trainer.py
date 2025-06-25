@@ -31,6 +31,7 @@ from verl.trainer.ppo.metric_utils import (
     compute_data_metrics,
     compute_throughout_metrics,
     compute_timing_metrics,
+    compute_training_metrics,
     reduce_metrics,
 )
 from verl.trainer.ppo.ray_trainer import (
@@ -353,6 +354,7 @@ class RayDAPOTrainer(RayPPOTrainer):
                 # collect metrics
                 metrics.update(compute_data_metrics(batch=batch, use_critic=self.use_critic))
                 metrics.update(compute_timing_metrics(batch=batch, timing_raw=timing_raw))
+                metrics.update(compute_training_metrics(batch=batch, reward_extra_infos_dict=reward_extra_infos_dict))
                 # TODO: implement actual tflpo and theoretical tflpo
                 n_gpus = self.resource_pool_manager.get_n_gpus()
                 metrics.update(compute_throughout_metrics(batch=batch, timing_raw=timing_raw, n_gpus=n_gpus))

@@ -1,14 +1,14 @@
 #!/bin/bash
 #SBATCH --job-name=ui-verl
-#SBATCH --nodes=2
+#SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --mem=1024G
 #SBATCH --partition=AISS2025031801
 #SBATCH --account=polyullm
 #SBATCH --gpus-per-node=8
 #SBATCH --cpus-per-task=128
-#SBATCH --output=/lustre/projects/polyullm/yuhang/r2/logs/policy_analysis/gui_on_policy-%j.out
-#SBATCH --error=/lustre/projects/polyullm/yuhang/r2/logs/policy_analysis/gui_on_policy-%j.err
+#SBATCH --output=/lustre/projects/polyullm/yuhang/r2/logs/on-policy_baseline/dapo_bsz64-%j.out
+#SBATCH --error=/lustre/projects/polyullm/yuhang/r2/logs/on-policy_baseline/dapo_bsz64-%j.err
 
 # set -x
 
@@ -91,15 +91,15 @@ SCRIPTS="
 set -x
 ulimit -n 65535
 
-python3 -m verl.trainer.main_ppo \
+python3 -m recipe.dapo.main_dapo \
     algorithm.adv_estimator=grpo \
     data.train_files=/lustre/projects/polyullm/yuhang/r2/data/train/ui_24k_0614_r1_grounding_point.parquet \
     data.val_files=/lustre/projects/polyullm/yuhang/r2/data/validation/ui_r1_gui_grounding_val_50p_wrong_samples_from_3b.parquet \
-    data.train_batch_size=128 \
+    data.train_batch_size=64 \
     data.max_prompt_length=8192 \
     data.max_response_length=8192 \
-    data.filter_overlong_prompts=True \
-    data.truncation='error' \
+    data.filter_overlong_prompts=False \
+    data.truncation='left' \
     data.image_key=images \
     custom_reward_function.path=/lustre/projects/polyullm/yuhang/r2/verl/cp/reward_fn/mix_gui_reward.py \
     custom_reward_function.name=mix_gui_reward_function \
@@ -110,8 +110,8 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.actor.use_dynamic_bsz=True \
     actor_rollout_ref.actor.ppo_max_token_len_per_gpu=32768 \
     actor_rollout_ref.actor.optim.lr=1e-6 \
-    actor_rollout_ref.actor.optim.lr_warmup_steps=10 \
-    actor_rollout_ref.actor.ppo_mini_batch_size=128 \
+    actor_rollout_ref.actor.optim.lr_warmup_steps=0 \
+    actor_rollout_ref.actor.ppo_mini_batch_size=64 \
     actor_rollout_ref.actor.clip_ratio_high=0.4 \
     actor_rollout_ref.actor.use_kl_loss=False \
     actor_rollout_ref.actor.kl_loss_coef=0.001 \
@@ -129,20 +129,23 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.rollout.enforce_eager=False \
     actor_rollout_ref.rollout.free_cache_engine=False \
     actor_rollout_ref.rollout.max_num_batched_tokens=16384 \
-    actor_rollout_ref.rollout.n=16 \
+    actor_rollout_ref.rollout.n=8 \
     actor_rollout_ref.rollout.temperature=1.0 \
     actor_rollout_ref.ref.log_prob_use_dynamic_bsz=True \
     actor_rollout_ref.ref.log_prob_max_token_len_per_gpu=65536 \
     actor_rollout_ref.ref.fsdp_config.param_offload=True \
     algorithm.use_kl_in_reward=False \
+    algorithm.filter_groups.enable=True \
+    algorithm.filter_groups.max_num_gen_batches=64 \
+    algorithm.filter_groups.metric=accuracy \
     trainer.logger=['console','wandb'] \
-    trainer.project_name='policy_analysis' \
-    trainer.experiment_name='gui_on_policy' \
+    trainer.project_name='on-policy_baseline' \
+    trainer.experiment_name='dapo_bsz64' \
     trainer.n_gpus_per_node=8 \
     trainer.nnodes=$SLURM_JOB_NUM_NODES \
-    trainer.save_freq=80 \
-    trainer.test_freq=40 \
-    trainer.total_epochs=2
+    trainer.save_freq=128 \
+    trainer.test_freq=64 \
+    trainer.total_epochs=8
 "
 
 PYTHONUNBUFFERED=1 srun --overlap --nodes=1 --ntasks=1 -w "$head_node" \
