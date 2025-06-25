@@ -7,8 +7,8 @@
 #SBATCH --account=polyullm
 #SBATCH --gpus-per-node=8
 #SBATCH --cpus-per-task=128
-#SBATCH --output=/lustre/projects/polyullm/yuhang/r2/logs/policy_analysis/gui_on_policy-%j.out
-#SBATCH --error=/lustre/projects/polyullm/yuhang/r2/logs/policy_analysis/gui_on_policy-%j.err
+#SBATCH --output=/lustre/projects/polyullm/yuhang/r2/logs/policy_analysis/gui_off_policy-%j.out
+#SBATCH --error=/lustre/projects/polyullm/yuhang/r2/logs/policy_analysis/gui_off_policy-%j.err
 
 # set -x
 
@@ -111,7 +111,7 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.actor.ppo_max_token_len_per_gpu=32768 \
     actor_rollout_ref.actor.optim.lr=1e-6 \
     actor_rollout_ref.actor.optim.lr_warmup_steps=10 \
-    actor_rollout_ref.actor.ppo_mini_batch_size=128 \
+    actor_rollout_ref.actor.ppo_mini_batch_size=32 \
     actor_rollout_ref.actor.clip_ratio_high=0.4 \
     actor_rollout_ref.actor.use_kl_loss=False \
     actor_rollout_ref.actor.kl_loss_coef=0.001 \
@@ -137,11 +137,11 @@ python3 -m verl.trainer.main_ppo \
     algorithm.use_kl_in_reward=False \
     trainer.logger=['console','wandb'] \
     trainer.project_name='policy_analysis' \
-    trainer.experiment_name='gui_on_policy' \
+    trainer.experiment_name='gui_off_policy' \
     trainer.n_gpus_per_node=8 \
     trainer.nnodes=$SLURM_JOB_NUM_NODES \
-    trainer.save_freq=80 \
-    trainer.test_freq=40 \
+    trainer.save_freq=20 \
+    trainer.test_freq=10 \
     trainer.total_epochs=2
 "
 

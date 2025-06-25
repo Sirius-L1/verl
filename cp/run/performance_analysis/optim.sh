@@ -7,8 +7,8 @@
 #SBATCH --account=polyullm
 #SBATCH --gpus-per-node=8
 #SBATCH --cpus-per-task=128
-#SBATCH --output=/lustre/projects/polyullm/yuhang/r2/logs/policy_analysis/gui_on_policy-%j.out
-#SBATCH --error=/lustre/projects/polyullm/yuhang/r2/logs/policy_analysis/gui_on_policy-%j.err
+#SBATCH --output=/lustre/projects/polyullm/yuhang/r2/logs/performance_analysis/optim-%j.out
+#SBATCH --error=/lustre/projects/polyullm/yuhang/r2/logs/performance_analysis/optim-%j.err
 
 # set -x
 
@@ -89,7 +89,6 @@ sleep 10
 
 SCRIPTS="
 set -x
-ulimit -n 65535
 
 python3 -m verl.trainer.main_ppo \
     algorithm.adv_estimator=grpo \
@@ -136,8 +135,8 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.ref.fsdp_config.param_offload=True \
     algorithm.use_kl_in_reward=False \
     trainer.logger=['console','wandb'] \
-    trainer.project_name='policy_analysis' \
-    trainer.experiment_name='gui_on_policy' \
+    trainer.project_name='performance_analysis' \
+    trainer.experiment_name='optim' \
     trainer.n_gpus_per_node=8 \
     trainer.nnodes=$SLURM_JOB_NUM_NODES \
     trainer.save_freq=80 \
