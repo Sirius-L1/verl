@@ -696,10 +696,7 @@ class RayPPOTrainer:
         sample_inputs = []
         sample_outputs = []
         sample_scores = []
-<<<<<<< HEAD
         sample_turns = []
-=======
->>>>>>> 0d16952 (feat: implement reward functions for point and bbox detection tasks)
         all_extra_infos = []
 
         for test_data in self.val_dataloader:
