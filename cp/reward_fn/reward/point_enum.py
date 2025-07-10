@@ -62,10 +62,10 @@ def _accuracy_reward(answer, ground_truth):
     
     if has_correct_point:
         # 如果有正确的点，分数为 1/n，其中n为总预测点数量
-        return 1.0 / len(pred_points), extracted_answer
+        return 1.0 / len(pred_points), extracted_answer, len(pred_points)
     else:
         # 如果没有正确的点，分数为0
-        return 0.0, extracted_answer
+        return 0.0, extracted_answer, len(pred_points)
 
 def calculate_reward(solution_str, ground_truth, extra_info=None, fmt_ratio=0.1, acc_ratio=0.9, **kwargs):
     """
@@ -88,7 +88,9 @@ def calculate_reward(solution_str, ground_truth, extra_info=None, fmt_ratio=0.1,
             "score": 0.0,
             "format": 0.0,
             "accuracy": 0.0,
-            "pred": ""
+            "pred": "",
+            "num_pred": 0,
+            "has_correct": 0
         }
     thinking = solution_dict["think"]
     answer = solution_dict["answer"]
@@ -99,14 +101,18 @@ def calculate_reward(solution_str, ground_truth, extra_info=None, fmt_ratio=0.1,
             "score": 0.0,
             "format": 0.0,
             "accuracy": 0.0,
-            "pred": ""
+            "pred": "",
+            "num_pred": 0,
+            "has_correct": 0
         }
     
-    accuracy_reward, extracted_answer = _accuracy_reward(answer, ground_truth)
+    accuracy_reward, extracted_answer, num_pred = _accuracy_reward(answer, ground_truth)
     
     return {
         "score": fmt_ratio * format_reward + acc_ratio * accuracy_reward,
         "format": format_reward,
         "accuracy": accuracy_reward,
-        "pred": extracted_answer
+        "pred": extracted_answer,
+        "num_pred": num_pred,
+        "has_correct": 1 if accuracy_reward > 0 else 0
     }
