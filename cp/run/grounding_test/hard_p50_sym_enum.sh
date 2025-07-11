@@ -139,8 +139,8 @@ python3 -m verl.trainer.main_ppo \
     trainer.experiment_name='hard_p50_enum' \
     trainer.n_gpus_per_node=8 \
     trainer.nnodes=$SLURM_JOB_NUM_NODES \
-    trainer.save_freq=128 \
-    trainer.test_freq=64 \
+    trainer.save_freq=64 \
+    trainer.test_freq=32 \
     trainer.total_epochs=3
 "
 
