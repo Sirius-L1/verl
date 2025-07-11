@@ -13,7 +13,7 @@ ACC_RATIO = 0.9
 # Dictionary to map data_source to the respective reward calculation function
 # The functions in the modules should all have the same name, e.g., 'calculate_reward'
 REWARD_HANDLERS = {
-    "point_enum": point_enum_reward.calculate_reward,
+    "point": point_enum_reward.calculate_reward,
     # TODO: Add more handlers as you create them
     # "new_type": new_type_reward_module.calculate_reward,
     
@@ -58,7 +58,9 @@ def enum_gui_reward_function(data_source, solution_str, ground_truth, extra_info
                 "accuracy": 0.0,
                 "pred": "",
                 "num_pred": 0,
-                "has_correct": False
+                "has_correct": 0,
+                "first_correct": 0,
+                "only_correct": 0
             }  # Return a default penalty score on error
     else:
         raise ValueError(f"Unknown data_source: '{data_source}'. No specific reward handler defined.")

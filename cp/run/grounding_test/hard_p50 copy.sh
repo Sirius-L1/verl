@@ -7,8 +7,8 @@
 #SBATCH --account=polyullm
 #SBATCH --gpus-per-node=8
 #SBATCH --cpus-per-task=128
-#SBATCH --output=/lustre/projects/polyullm/yuhang/r2/checkpoints/grounding_test/hard_p50_enum/log-%j.out
-#SBATCH --error=/lustre/projects/polyullm/yuhang/r2/checkpoints/grounding_test/hard_p50_enum/log-%j.err
+#SBATCH --output=/lustre/projects/polyullm/yuhang/r2/checkpoints/grounding_test/hard_p50/log-%j.out
+#SBATCH --error=/lustre/projects/polyullm/yuhang/r2/checkpoints/grounding_test/hard_p50/log-%j.err
 
 # set -x
 
@@ -93,22 +93,22 @@ ulimit -n 65535
 
 python3 -m verl.trainer.main_ppo \
     algorithm.adv_estimator=grpo \
-    data.train_files=/lustre/projects/polyullm/yuhang/r2/data/train/ui_9k_0709_r1_grounding_point_hard_enum.parquet \
-    data.val_files=/lustre/projects/polyullm/yuhang/r2/data/validation/ui_r1_gui_grounding_val_50p_wrong_samples_from_3b_enum.parquet \
+    data.train_files=/lustre/projects/polyullm/yuhang/r2/data/train/ui_9k_0709_r1_grounding_point_hard.parquet \
+    data.val_files=/lustre/projects/polyullm/yuhang/r2/data/validation/ui_r1_gui_grounding_val_50p_wrong_samples_from_3b.parquet \
     data.train_batch_size=64 \
     data.max_prompt_length=8192 \
-    data.max_response_length=4096 \
+    data.max_response_length=8192 \
     data.filter_overlong_prompts=True \
     data.truncation='error' \
     data.image_key=images \
-    custom_reward_function.path=/lustre/projects/polyullm/yuhang/r2/verl/cp/reward_fn/enum_gui_reward.py \
-    custom_reward_function.name=enum_gui_reward_function \
+    custom_reward_function.path=/lustre/projects/polyullm/yuhang/r2/verl/cp/reward_fn/mix_gui_reward.py \
+    custom_reward_function.name=mix_gui_reward_function \
     actor_rollout_ref.model.path=/lustre/projects/polyullm/models/Qwen/Qwen2.5-VL-3B-Instruct \
     actor_rollout_ref.model.enable_activation_offload=True \
     actor_rollout_ref.model.enable_gradient_checkpointing=True \
     actor_rollout_ref.model.use_remove_padding=True \
-    actor_rollout_ref.actor.use_dynamic_bsz=False \
-    actor_rollout_ref.actor.ppo_micro_batch_size_per_gpu=1 \
+    actor_rollout_ref.actor.use_dynamic_bsz=True \
+    actor_rollout_ref.actor.ppo_max_token_len_per_gpu=32768 \
     actor_rollout_ref.actor.optim.lr=1e-6 \
     actor_rollout_ref.actor.optim.lr_warmup_steps=0 \
     actor_rollout_ref.actor.ppo_mini_batch_size=64 \
@@ -119,24 +119,25 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.actor.entropy_coeff=0 \
     actor_rollout_ref.actor.fsdp_config.param_offload=False \
     actor_rollout_ref.actor.fsdp_config.optimizer_offload=False \
-    actor_rollout_ref.rollout.log_prob_use_dynamic_bsz=False \
-    actor_rollout_ref.rollout.log_prob_micro_batch_size_per_gpu=4 \
+    actor_rollout_ref.rollout.log_prob_use_dynamic_bsz=True \
+    actor_rollout_ref.rollout.log_prob_max_token_len_per_gpu=65536 \
     actor_rollout_ref.rollout.tensor_model_parallel_size=1 \
     actor_rollout_ref.rollout.name=vllm \
     actor_rollout_ref.rollout.gpu_memory_utilization=0.7 \
-    actor_rollout_ref.rollout.max_num_batched_tokens=12288 \
+    actor_rollout_ref.rollout.max_num_batched_tokens=16384 \
     actor_rollout_ref.rollout.enable_chunked_prefill=False \
     actor_rollout_ref.rollout.enforce_eager=False \
     actor_rollout_ref.rollout.free_cache_engine=False \
+    actor_rollout_ref.rollout.max_num_batched_tokens=16384 \
     actor_rollout_ref.rollout.n=8 \
     actor_rollout_ref.rollout.temperature=1.0 \
-    actor_rollout_ref.ref.log_prob_use_dynamic_bsz=False \
-    actor_rollout_ref.ref.log_prob_micro_batch_size_per_gpu=4 \
+    actor_rollout_ref.ref.log_prob_use_dynamic_bsz=True \
+    actor_rollout_ref.ref.log_prob_max_token_len_per_gpu=65536 \
     actor_rollout_ref.ref.fsdp_config.param_offload=True \
     algorithm.use_kl_in_reward=False \
     trainer.logger=['console','wandb'] \
     trainer.project_name='grounding_test' \
-    trainer.experiment_name='hard_p50_enum' \
+    trainer.experiment_name='hard_p50' \
     trainer.n_gpus_per_node=8 \
     trainer.nnodes=$SLURM_JOB_NUM_NODES \
     trainer.save_freq=128 \
