@@ -7,8 +7,8 @@
 #SBATCH --account=polyullm
 #SBATCH --gpus-per-node=8
 #SBATCH --cpus-per-task=128
-#SBATCH --output=/lustre/projects/polyullm/yuhang/r2/checkpoints/grounding_test/hard_p50_enum/log-%j.out
-#SBATCH --error=/lustre/projects/polyullm/yuhang/r2/checkpoints/grounding_test/hard_p50_enum/log-%j.err
+#SBATCH --output=/lustre/projects/polyullm/yuhang/r2/checkpoints/grounding_test/hard_p50_enum_v1_no_k/log-%j.out
+#SBATCH --error=/lustre/projects/polyullm/yuhang/r2/checkpoints/grounding_test/hard_p50_enum_v1_no_k/log-%j.err
 
 # set -x
 
@@ -101,8 +101,8 @@ python3 -m verl.trainer.main_ppo \
     data.filter_overlong_prompts=True \
     data.truncation='error' \
     data.image_key=images \
-    custom_reward_function.path=/lustre/projects/polyullm/yuhang/r2/verl/cp/reward_fn/sym_enum_gui_reward.py \
-    custom_reward_function.name=enum_gui_reward_function \
+    custom_reward_function.path=/lustre/projects/polyullm/yuhang/r2/verl/cp/reward_fn/enum_v1_no_k_gui_reward.py \
+    custom_reward_function.name=enum_v1_no_k_gui_reward_function \
     actor_rollout_ref.model.path=/lustre/projects/polyullm/models/Qwen/Qwen2.5-VL-3B-Instruct \
     actor_rollout_ref.model.enable_activation_offload=True \
     actor_rollout_ref.model.enable_gradient_checkpointing=True \
@@ -136,12 +136,12 @@ python3 -m verl.trainer.main_ppo \
     algorithm.use_kl_in_reward=False \
     trainer.logger=['console','wandb'] \
     trainer.project_name='grounding_test' \
-    trainer.experiment_name='hard_p50_sym_enum' \
+    trainer.experiment_name='hard_p50_enum_v1_no_k' \
     trainer.n_gpus_per_node=8 \
     trainer.nnodes=$SLURM_JOB_NUM_NODES \
     trainer.save_freq=32 \
     trainer.test_freq=32 \
-    trainer.total_epochs=3
+    trainer.total_epochs=5
 "
 
 PYTHONUNBUFFERED=1 srun --overlap --nodes=1 --ntasks=1 -w "$head_node" \

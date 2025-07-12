@@ -69,7 +69,7 @@ def _accuracy_reward(answer, ground_truth):
         accuracy = 0.5 * (1 + 1 / num_pred)
     else:
         # 场景二：全错，得分在 [0.0, 0.5)，N越大越好
-        accuracy = 0.5 * (1 - 1 / num_pred)
+        accuracy = 0.5 * (1 - 1 / min(num_pred, 8))
             
     return accuracy, extracted_answer, num_pred, first_correct
 
