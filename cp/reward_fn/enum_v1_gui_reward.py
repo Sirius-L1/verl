@@ -60,7 +60,8 @@ def enum_v1_gui_reward_function(data_source, solution_str, ground_truth, extra_i
                 "num_pred": 0,
                 "has_correct": 0,
                 "first_correct": 0,
-                "only_correct": 0
+                "only_correct": 0,
+                "is_collinear": 0
             }  # Return a default penalty score on error
     else:
         raise ValueError(f"Unknown data_source: '{data_source}'. No specific reward handler defined.")

@@ -2,7 +2,7 @@ import logging
 
 try:
     # Change from relative imports to absolute imports
-    from cp.reward_fn.reward import point_enum_v1_no_k as point_enum_reward
+    from cp.reward_fn.reward import point_enum_v1_no_clip as point_enum_reward
 except ImportError as e:
     logging.error(f"Error importing reward modules: {e}. Ensure __init__.py files exist and relative paths are correct.")
     raise e
@@ -23,7 +23,7 @@ REWARD_HANDLERS = {
     "osg": point_enum_reward.calculate_reward,
 }
 
-def enum_v1_no_k_gui_reward_function(data_source, solution_str, ground_truth, extra_info=None, **kwargs):
+def enum_v1_no_clip_gui_reward_function(data_source, solution_str, ground_truth, extra_info=None, **kwargs):
     """
     Main reward function dispatcher for the 'cyber' project.
     Delegates reward calculation to specific functions based on the data_source using a dictionary lookup.
