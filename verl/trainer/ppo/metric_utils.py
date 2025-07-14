@@ -490,9 +490,9 @@ def compute_training_metrics(batch: DataProto, reward_extra_infos_dict: dict[str
             for metric_name, metric_val in metric2val.items():
                 if not (metric_name.endswith("std") or metric_name.endswith("mean")):
                     metric_sec = 'train-core'
-                else:
-                    metric_sec = 'train-aux'
-                pfx = f'{metric_sec}/{data_source}/{var_name}/{metric_name}'
-                metric_dict[pfx] = metric_val
+                # else:
+                #     metric_sec = 'train-aux'
+                    pfx = f'{metric_sec}/{data_source}/{var_name}/{metric_name}'
+                    metric_dict[pfx] = metric_val
     
     return metric_dict

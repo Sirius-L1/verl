@@ -128,16 +128,19 @@ def calculate_reward(solution_str, ground_truth, extra_info=None, fmt_ratio=0.0,
     clip_lower = kwargs.get('clip_lower', 2)
     clip_upper = kwargs.get('clip_upper', 8)
 
-    solution_dict = extract_think_format(solution_str)
-    # If the overall 'think'/'answer' format is wrong, return score of -1.
-    if solution_dict is None:
-        return {
-            "score": -1.0, "format": 0.0, "accuracy": -1.0, "pred": "",
-            "num_pred": 0, "has_correct": 0, "first_correct": 0,
-            "only_correct": 0, "is_collinear": 0
-        }
-        
-    answer = solution_dict["answer"]
+    if extra_info.get("no_think", False):
+        answer = solution_str
+    else:
+        solution_dict = extract_think_format(solution_str)
+        # If the overall 'think'/'answer' format is wrong, return score of -1.
+        if solution_dict is None:
+            return {
+                "score": -1.0, "format": 0.0, "accuracy": -1.0, "pred": "",
+                "num_pred": 0, "has_correct": 0, "first_correct": 0,
+                "only_correct": 0, "is_collinear": 0
+            }
+            
+        answer = solution_dict["answer"]
     
     # Reuse _format_reward to check the format of the 'answer' part.
     # If it's invalid, return score of -1.
