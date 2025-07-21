@@ -7,8 +7,8 @@
 #SBATCH --account=polyullm
 #SBATCH --gpus-per-node=8
 #SBATCH --cpus-per-task=128
-#SBATCH --output=/lustre/projects/polyullm/yuhang/r2/checkpoints/grounding_test_1/enum_v1_no_clip_1/log-%j.out
-#SBATCH --error=/lustre/projects/polyullm/yuhang/r2/checkpoints/grounding_test_1/enum_v1_no_clip_1/log-%j.err
+#SBATCH --output=/lustre/projects/polyullm/yuhang/r2/checkpoints/grounding_test_1/enum_v1_no_clip_1_c/log-%j.out
+#SBATCH --error=/lustre/projects/polyullm/yuhang/r2/checkpoints/grounding_test_1/enum_v1_no_clip_1_c/log-%j.err
 
 # set -x
 
@@ -136,12 +136,14 @@ python3 -m verl.trainer.main_ppo \
     algorithm.use_kl_in_reward=False \
     trainer.logger=['console','wandb'] \
     trainer.project_name='grounding_test_1' \
-    trainer.experiment_name='enum_v1_no_clip_1' \
+    trainer.experiment_name='enum_v1_no_clip_1_c' \
     trainer.n_gpus_per_node=8 \
     trainer.nnodes=$SLURM_JOB_NUM_NODES \
-    trainer.save_freq=32 \
-    trainer.test_freq=32 \
-    trainer.total_epochs=3
+    trainer.save_freq=16 \
+    trainer.test_freq=16 \
+    trainer.total_epochs=3 \
+    trainer.resume_mode=resume_path \
+    trainer.resume_from_path=/lustre/projects/polyullm/yuhang/r2/checkpoints/grounding_test_1/enum_v1_no_clip_1/global_step_288
 "
 
 PYTHONUNBUFFERED=1 srun --overlap --nodes=1 --ntasks=1 -w "$head_node" \

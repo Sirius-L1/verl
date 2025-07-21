@@ -1,14 +1,14 @@
 #!/bin/bash
 #SBATCH --job-name=ui-verl
-#SBATCH --nodes=1
+#SBATCH --nodes=2
 #SBATCH --ntasks-per-node=1
 #SBATCH --mem=1024G
 #SBATCH --partition=AISS2025031801
 #SBATCH --account=polyullm
 #SBATCH --gpus-per-node=8
 #SBATCH --cpus-per-task=128
-#SBATCH --output=/lustre/projects/polyullm/yuhang/r2/checkpoints/grounding_test_1/enum_v1_no_clip_1/log-%j.out
-#SBATCH --error=/lustre/projects/polyullm/yuhang/r2/checkpoints/grounding_test_1/enum_v1_no_clip_1/log-%j.err
+#SBATCH --output=/lustre/projects/polyullm/yuhang/r2/checkpoints/grounding_test_1/enum_v1_no_clip_1_bs128/log-%j.out
+#SBATCH --error=/lustre/projects/polyullm/yuhang/r2/checkpoints/grounding_test_1/enum_v1_no_clip_1_bs128/log-%j.err
 
 # set -x
 
@@ -95,7 +95,7 @@ python3 -m verl.trainer.main_ppo \
     algorithm.adv_estimator=grpo \
     data.train_files=/lustre/projects/polyullm/yuhang/r2/data/train/ui_14k_0715_r1_grounding_point_enum_1.parquet \
     data.val_files=/lustre/projects/polyullm/yuhang/r2/data/validation/ui_r1_gui_grounding_val_50p_wrong_samples_from_3b_enum_1.parquet \
-    data.train_batch_size=64 \
+    data.train_batch_size=128 \
     data.max_prompt_length=7168 \
     data.max_response_length=1024 \
     data.filter_overlong_prompts=True \
@@ -111,7 +111,7 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.actor.ppo_micro_batch_size_per_gpu=1 \
     actor_rollout_ref.actor.optim.lr=1e-6 \
     actor_rollout_ref.actor.optim.lr_warmup_steps=0 \
-    actor_rollout_ref.actor.ppo_mini_batch_size=64 \
+    actor_rollout_ref.actor.ppo_mini_batch_size=128 \
     actor_rollout_ref.actor.clip_ratio_high=0.4 \
     actor_rollout_ref.actor.use_kl_loss=False \
     actor_rollout_ref.actor.kl_loss_coef=0.001 \
@@ -136,7 +136,7 @@ python3 -m verl.trainer.main_ppo \
     algorithm.use_kl_in_reward=False \
     trainer.logger=['console','wandb'] \
     trainer.project_name='grounding_test_1' \
-    trainer.experiment_name='enum_v1_no_clip_1' \
+    trainer.experiment_name='enum_v1_no_clip_1_bs128' \
     trainer.n_gpus_per_node=8 \
     trainer.nnodes=$SLURM_JOB_NUM_NODES \
     trainer.save_freq=32 \

@@ -93,7 +93,7 @@ ulimit -n 65535
 
 python3 -m verl.trainer.main_ppo \
     algorithm.adv_estimator=grpo \
-    data.train_files=/lustre/projects/polyullm/yuhang/r2/data/train/ui_24k_0614_r1_grounding_point_enum_no_think.parquet \
+    data.train_files=/lustre/projects/polyullm/yuhang/r2/data/train/ui_14k_0715_r1_grounding_point_enum_no_think.parquet \
     data.val_files=/lustre/projects/polyullm/yuhang/r2/data/validation/ui_r1_gui_grounding_val_50p_wrong_samples_from_3b_enum_no_think.parquet \
     data.train_batch_size=64 \
     data.max_prompt_length=7168 \
@@ -108,7 +108,7 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.model.enable_gradient_checkpointing=True \
     actor_rollout_ref.model.use_remove_padding=True \
     actor_rollout_ref.actor.use_dynamic_bsz=False \
-    actor_rollout_ref.actor.ppo_micro_batch_size_per_gpu=2 \
+    actor_rollout_ref.actor.ppo_micro_batch_size_per_gpu=1 \
     actor_rollout_ref.actor.optim.lr=1e-6 \
     actor_rollout_ref.actor.optim.lr_warmup_steps=0 \
     actor_rollout_ref.actor.ppo_mini_batch_size=64 \
@@ -122,7 +122,7 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.actor.entropy_from_logits_with_chunking=True \
     actor_rollout_ref.actor.entropy_checkpointing=True \
     actor_rollout_ref.rollout.log_prob_use_dynamic_bsz=False \
-    actor_rollout_ref.rollout.log_prob_micro_batch_size_per_gpu=8 \
+    actor_rollout_ref.rollout.log_prob_micro_batch_size_per_gpu=4 \
     actor_rollout_ref.rollout.tensor_model_parallel_size=1 \
     actor_rollout_ref.rollout.name=vllm \
     actor_rollout_ref.rollout.gpu_memory_utilization=0.7 \
@@ -133,7 +133,7 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.rollout.n=8 \
     actor_rollout_ref.rollout.temperature=1.0 \
     actor_rollout_ref.ref.log_prob_use_dynamic_bsz=False \
-    actor_rollout_ref.ref.log_prob_micro_batch_size_per_gpu=8 \
+    actor_rollout_ref.ref.log_prob_micro_batch_size_per_gpu=4 \
     actor_rollout_ref.ref.fsdp_config.param_offload=True \
     algorithm.use_kl_in_reward=False \
     trainer.logger=['console','wandb'] \
@@ -143,7 +143,7 @@ python3 -m verl.trainer.main_ppo \
     trainer.nnodes=$SLURM_JOB_NUM_NODES \
     trainer.save_freq=32 \
     trainer.test_freq=32 \
-    trainer.total_epochs=5
+    trainer.total_epochs=3
 "
 
 PYTHONUNBUFFERED=1 srun --overlap --nodes=1 --ntasks=1 -w "$head_node" \

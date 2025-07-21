@@ -17,7 +17,7 @@ This script is used to merge huggingface model and test verl checkpoints from FS
 
 To merge FSDP checkpoints:
 ```sh
-python scripts/model_merger.py merge \
+python scripts/model_merger_abs.py merge \
     --backend fsdp \
     --local_dir checkpoints/verl_fsdp_gsm8k_examples/qwen2_5_0b5_fsdp_saveload/global_step_1/actor \
     --target_dir /path/to/merged_hf_model
@@ -25,7 +25,7 @@ python scripts/model_merger.py merge \
 
 To merge Megatron checkpoints:
 ```sh
-python scripts/model_merger.py merge \
+python scripts/model_merger_abs.py merge \
     --backend megatron \
     --tie-word-embedding \
     --local_dir checkpoints/verl_megatron_gsm8k_examples/qwen2_5_0b5_megatron_saveload/global_step_1/actor \
@@ -37,6 +37,7 @@ https://verl.readthedocs.io/en/latest/advance/checkpoint.html#convert-fsdp-and-m
 """
 
 import argparse
+import json
 import os
 import re
 import warnings
@@ -56,6 +57,8 @@ from transformers import (
     AutoModelForCausalLM,
     AutoModelForTokenClassification,
     AutoModelForVision2Seq,
+    AutoProcessor,
+    AutoTokenizer,
     GenerationConfig,
     PretrainedConfig,
 )
@@ -83,6 +86,7 @@ def set_pad_token_id(tokenizer):
         tokenizer.pad_token = tokenizer.eos_token
         warnings.warn(f"tokenizer.pad_token is None. Now set to {tokenizer.eos_token}", stacklevel=1)
 
+
 def hf_tokenizer(name_or_path, correct_pad_token=True, correct_gemma2=True, **kwargs):
     """Create a huggingface pretrained tokenizer which correctness handles eos and pad tokens.
 
@@ -97,8 +101,6 @@ def hf_tokenizer(name_or_path, correct_pad_token=True, correct_gemma2=True, **kw
         transformers.PreTrainedTokenizer: The pretrained tokenizer.
 
     """
-    from transformers import AutoTokenizer
-
     if correct_gemma2 and isinstance(name_or_path, str) and "gemma-2-2b-it" in name_or_path:
         # the EOS token in gemma2 is ambiguious, which may worsen RL performance.
         # https://huggingface.co/google/gemma-2-2b-it/commit/17a01657f5c87135bcdd0ec7abb4b2dece04408a
@@ -120,8 +122,6 @@ def hf_processor(name_or_path, **kwargs):
     Returns:
         transformers.ProcessorMixin: The pretrained processor.
     """
-    from transformers import AutoProcessor
-
     try:
         processor = AutoProcessor.from_pretrained(name_or_path, **kwargs)
     except Exception as e:
@@ -136,20 +136,72 @@ def hf_processor(name_or_path, **kwargs):
     return processor
 
 
+def parse_args():
+    parser = argparse.ArgumentParser(description="verl model merger")
+    subparsers = parser.add_subparsers(dest="operation", required=True, help="Specify 'merge' or 'test' operation.")
+
+    base_op_parser = argparse.ArgumentParser(add_help=False)
+    base_op_parser.add_argument(
+        "--backend", type=str, required=True, choices=["fsdp", "megatron"], help="The backend of the model"
+    )
+    base_op_parser.add_argument("--local_dir", type=str, default=None, help="Path to the saved model checkpoints.")
+    base_op_parser.add_argument(
+        "--tie-word-embedding",
+        action="store_true",
+        help="Whether to tie word embedding weights (currently only Megatron supported)",
+    )
+    base_op_parser.add_argument(
+        "--is-value-model",
+        action="store_true",
+        help="Whether the model is a value model (currently only Megatron supported)",
+    )
+    base_op_parser.add_argument(
+        "--use_cpu_initialization",
+        action="store_true",
+        help="Whether to use CPU initialization for the model. This is useful for large models that cannot "
+        "fit into GPU memory during initialization.",
+    )
+    base_op_parser.add_argument(
+        "--hf_model_path", type=str, default=None, help="(Deprecated) Path to the original Hugging Face model for config."
+    )
+
+    merge_parser = subparsers.add_parser("merge", parents=[base_op_parser], help="Merge model checkpoints and save.")
+    merge_parser.add_argument(
+        "--target_dir", default="tmp", type=str, help="Directory to save the merged huggingface model"
+    )
+    merge_parser.add_argument(
+        "--hf_upload_path", default=None, type=str, help="Hugging Face repository ID to upload the model"
+    )
+    merge_parser.add_argument(
+        "--private", action="store_true", help="Whether to upload the model to a private Hugging Face repository"
+    )
+
+    test_parser = subparsers.add_parser(
+        "test", parents=[base_op_parser], help="Test merged model against a reference Hugging Face model"
+    )
+    test_parser.add_argument(
+        "--test_hf_dir", type=str, required=True, help="Path to the reference Hugging Face model directory for testing"
+    )
+
+    args = parser.parse_args()
+    return args
+
+
 @dataclass
 class ModelMergerConfig:
     operation: str  # 'merge' or 'test'
     backend: str
-    local_dir: str
-    hf_model_config_path: str
     target_dir: Optional[str] = "tmp"
     hf_upload_path: Optional[str] = None
     private: bool = False
     test_hf_dir: Optional[str] = None
     tie_word_embedding: bool = False
     is_value_model: bool = False
-    hf_model_path: Optional[str] = None
+    local_dir: Optional[str] = None
+    hf_model_config_path: Optional[str] = None
     hf_upload: bool = field(init=False)
+    use_cpu_initialization: bool = False
+    hf_model_path: Optional[str] = None
 
     def __post_init__(self):
         self.hf_upload = self.operation == "merge" and bool(self.hf_upload_path)
@@ -157,11 +209,68 @@ class ModelMergerConfig:
             self.target_dir = None
             self.hf_upload_path = None
             self.private = False
-        if self.target_dir:
+        if self.target_dir and self.operation == "merge":
             self.target_dir = os.path.join(self.local_dir, self.target_dir)
 
 
+def generate_config_from_args(args: argparse.Namespace) -> ModelMergerConfig:
+    common_config_args = {
+        "operation": args.operation,
+        "backend": args.backend,
+        "tie_word_embedding": args.tie_word_embedding,
+        "is_value_model": args.is_value_model,
+        "local_dir": args.local_dir,
+        "hf_model_config_path": args.local_dir,
+        "use_cpu_initialization": args.use_cpu_initialization,
+        "hf_model_path": args.hf_model_path,
+    }
+
+    if args.operation == "merge":
+        config = ModelMergerConfig(
+            **common_config_args,
+            target_dir=args.target_dir,
+            hf_upload_path=args.hf_upload_path,
+            private=args.private,
+            test_hf_dir=None,
+        )
+        if config.target_dir:
+            os.makedirs(config.target_dir, exist_ok=True)
+    elif args.operation == "test":
+        config = ModelMergerConfig(
+            **common_config_args,
+            test_hf_dir=args.test_hf_dir,
+            # the following args are not used by test operation
+            target_dir=None,
+            hf_upload_path=None,
+            private=False,
+        )
+    else:
+        raise NotImplementedError(f"Unknown operation: {args.operation}")
+    return config
+
+
 class BaseModelMerger(ABC):
+    """
+    Abstract base class for merging distributed model checkpoints into HuggingFace format.
+
+    This class provides common functionality for converting model checkpoints from different
+    distributed training backends (FSDP, Megatron) into standard HuggingFace format that
+    can be easily loaded and used for inference or further training.
+
+    The merger supports two main operations:
+    - merge: Convert and save checkpoints to HuggingFace format
+    - test: Validate merged checkpoints against a reference model
+
+    Args:
+        config (ModelMergerConfig): Configuration object containing paths, backend type,
+            and operation parameters.
+
+    Attributes:
+        config (ModelMergerConfig): The configuration object passed during initialization.
+        hf_model_config_path (str): Path to the HuggingFace model configuration files.
+        model_config (PretrainedConfig): Loaded HuggingFace model configuration.
+    """
+
     def __init__(self, config: ModelMergerConfig):
         self.config = config
         self.hf_model_config_path = config.hf_model_config_path
@@ -193,7 +302,10 @@ class BaseModelMerger(ABC):
             try:
                 model.generation_config = GenerationConfig.from_pretrained(self.hf_model_config_path)
             except OSError:
-                print(f"Warning: Generation config file not found in {self.hf_model_config_path}, using a generation config created from the model config.")
+                print(
+                    f"Warning: Generation config file not found in {self.hf_model_config_path}, using a "
+                    f"generation config created from the model config."
+                )
         return model
 
     def save_lora_adapter(self, state_dict: dict[str, torch.Tensor]):
@@ -244,7 +356,11 @@ class BaseModelMerger(ABC):
         save_file(lora_params, os.path.join(lora_path, "adapter_model.safetensors"))
 
         for name in list(state_dict.keys()):
-            key = name.replace("base_model.model.", "").replace(".base_layer.weight", ".weight").replace(".base_layer.bias", ".bias")
+            key = (
+                name.replace("base_model.model.", "")
+                .replace(".base_layer.weight", ".weight")
+                .replace(".base_layer.bias", ".bias")
+            )
             state_dict[key] = state_dict.pop(name)
 
         return lora_path
@@ -275,20 +391,86 @@ class BaseModelMerger(ABC):
             tokenizer.save_pretrained(self.config.target_dir)
 
     def upload_to_huggingface(self):
+        import requests
         from huggingface_hub import HfApi
+        from huggingface_hub.utils import HfHubHTTPError, RepositoryNotFoundError
 
         api = HfApi()
-        api.create_repo(repo_id=self.config.hf_upload_path, private=self.config.private, exist_ok=True)
-        api.upload_folder(folder_path=self.config.target_dir, repo_id=self.config.hf_upload_path, repo_type="model")
+        try:
+            # Attempt to create repository
+            api.create_repo(repo_id=self.config.hf_upload_path, private=self.config.private, exist_ok=True)
+        except HfHubHTTPError as e:
+            # Handle authentication/API errors
+            if e.response.status_code == 401:
+                raise PermissionError(
+                    "Hugging Face authentication failed. Verify your token is valid and has write permissions."
+                ) from e
+            elif e.response.status_code == 404:
+                raise RepositoryNotFoundError(f"Repository path not found: {self.config.hf_upload_path}") from e
+            else:
+                raise ConnectionError(f"Failed to create repository ({e.response.status_code}): {e}") from e
+        except requests.exceptions.ConnectionError as e:
+            raise ConnectionError("Network connection failed. Check your internet connection.") from e
+
+        try:
+            # Attempt folder upload
+            api.upload_folder(folder_path=self.config.target_dir, repo_id=self.config.hf_upload_path, repo_type="model")
+        except HfHubHTTPError as e:
+            if e.response.status_code == 401:
+                raise PermissionError("Authentication failed during upload. Token may have expired.") from e
+            else:
+                raise RuntimeError(f"Upload failed ({e.response.status_code}): {e}") from e
+        except requests.exceptions.ConnectionError as e:
+            raise ConnectionError("Network interruption during upload. Try again with stable connection.") from e
+        except OSError as e:
+            raise FileNotFoundError(f"Local folder error: {self.config.target_dir} - {str(e)}") from e
+        except Exception as e:
+            raise RuntimeError(f"Unexpected error during upload: {str(e)}") from e
 
     @abstractmethod
     def merge_and_save(self):
         raise NotImplementedError("Subclasses should implement this method")
 
+    @abstractmethod
+    def cleanup(self):
+        raise NotImplementedError("Subclasses should implement this method to clean up resources if needed")
+
 
 class FSDPModelMerger(BaseModelMerger):
+    """
+    Model merger for FSDP (Fully Sharded Data Parallel) checkpoints.
+
+    This class handles the conversion of FSDP distributed checkpoints into HuggingFace format.
+    FSDP shards model parameters across multiple processes, and this merger reconstructs
+    the full model by loading and concatenating the sharded parameters from all ranks.
+
+    The merger supports various FSDP configurations including:
+    - Pure FSDP (single dimension sharding)
+    - FSDP + DDP (data parallel + fully sharded data parallel)
+    - DTensor-based sharding with custom device meshes
+
+    Key features:
+    - Automatic detection of world size from checkpoint filenames
+    - Support for DTensor and non-DTensor checkpoints
+    - Parallel loading of checkpoint shards for efficiency
+    - Validation against reference HuggingFace models
+    """
+
     def _get_world_size(self) -> int:
         """Extracts the FSDP world_size from checkpoint filenames (e.g., 'model_world_size_8_rank_0.pt')."""
+        # Try to get world size from config file first
+        config_path = Path(self.config.local_dir) / "fsdp_config.json"
+        if config_path.exists():
+            try:
+                with open(config_path) as f:
+                    config = json.load(f)
+                world_size = config.get("world_size", None)
+                if world_size is not None:
+                    return world_size
+            except (json.JSONDecodeError, KeyError):
+                pass
+        
+        # Fall back to filename parsing
         for filename in os.listdir(self.config.local_dir):
             match = re.match(r"model_world_size_(\d+)_rank_0\.pt", filename)
             if match:
@@ -296,7 +478,11 @@ class FSDPModelMerger(BaseModelMerger):
         raise FileNotFoundError(f"Could not determine world size. No file matching 'model_world_size_(\d+)_rank_0.pt' found in {self.config.local_dir}")
 
     def _load_rank_zero_state_dict(self, world_size: int) -> dict:
-        return torch.load(Path(self.config.local_dir) / f"model_world_size_{world_size}_rank_0.pt", map_location="cpu", weights_only=False)
+        return torch.load(
+            Path(self.config.local_dir) / f"model_world_size_{world_size}_rank_0.pt",
+            map_location="cpu",
+            weights_only=False,
+        )
 
     def _extract_device_mesh_info(self, state_dict: dict, world_size: int) -> tuple[np.ndarray, tuple[str, ...]]:
         """
@@ -318,7 +504,9 @@ class FSDPModelMerger(BaseModelMerger):
 
         return mesh, mesh_dim_names
 
-    def _calculate_shard_configuration(self, mesh: np.ndarray, mesh_dim_names: tuple[str, ...]) -> tuple[int, tuple[int, ...]]:
+    def _calculate_shard_configuration(
+        self, mesh: np.ndarray, mesh_dim_names: tuple[str, ...]
+    ) -> tuple[int, tuple[int, ...]]:
         """Calculates the total number of shards and the shape of the device mesh."""
         assert mesh_dim_names in (("fsdp",), ("ddp", "fsdp")), f"Unsupported mesh_dim_names {mesh_dim_names}"
 
@@ -343,7 +531,9 @@ class FSDPModelMerger(BaseModelMerger):
 
         raise NotImplementedError(f"Unsupported placement: {placement}")
 
-    def _load_and_merge_state_dicts(self, world_size: int, total_shards: int, mesh_shape: tuple[int, ...], mesh_dim_names: tuple[str, ...]) -> dict[str, torch.Tensor]:
+    def _load_and_merge_state_dicts(
+        self, world_size: int, total_shards: int, mesh_shape: tuple[int, ...], mesh_dim_names: tuple[str, ...]
+    ) -> dict[str, torch.Tensor]:
         model_state_dict_lst = [None] * total_shards
 
         def process_one_shard(rank: int, model_state_dict_lst: list):
@@ -419,7 +609,7 @@ class FSDPModelMerger(BaseModelMerger):
         if self.config.operation == "test":
             if not self.config.test_hf_dir:
                 raise ValueError("test_hf_dir must be provided for test operation")
-            self._test_state_dict(merged_state_dict)
+            self._validate_state_dict(merged_state_dict)
         elif self.config.operation == "merge":
             self.save_hf_model_and_tokenizer(merged_state_dict)
             if self.config.hf_upload:
@@ -427,7 +617,7 @@ class FSDPModelMerger(BaseModelMerger):
         else:
             raise ValueError(f"Unknown operation: {self.config.operation}")
 
-    def _test_state_dict(self, state_dict: dict[str, torch.Tensor]):
+    def _validate_state_dict(self, state_dict: dict[str, torch.Tensor]):
         auto_model_class = self.get_transformers_auto_model_class()
 
         hf_model = auto_model_class.from_pretrained(self.config.test_hf_dir, torch_dtype=torch.bfloat16)
@@ -446,22 +636,51 @@ class FSDPModelMerger(BaseModelMerger):
         for key in hf_model_keys:
             hf_shape = hf_state_dict[key].shape
             collected_shape = state_dict[key].shape
-            assert hf_shape == collected_shape, f"Shape mismatch for key '{key}': original {hf_shape} vs collected {collected_shape}"
+            assert hf_shape == collected_shape, (
+                f"Shape mismatch for key '{key}': original {hf_shape} vs collected {collected_shape}"
+            )
 
             hf_dtype = hf_state_dict[key].dtype
             collected_dtype = state_dict[key].dtype
-            assert hf_dtype == collected_dtype, f"Dtype mismatch for key '{key}': original {hf_dtype} vs collected {collected_dtype}"
+            assert hf_dtype == collected_dtype, (
+                f"Dtype mismatch for key '{key}': original {hf_dtype} vs collected {collected_dtype}"
+            )
 
             torch.testing.assert_close(hf_state_dict[key], state_dict[key], atol=1e-6, rtol=1e-6)
 
         print("FSDP checks passed: The merged state_dict matches the hf model saved by FSDPCheckpointManager.")
 
+    def cleanup(self):
+        """Cleanup temporary files if needed."""
+        # FSDP merger does not create temporary files, so no cleanup is needed.
+        pass
+
 
 class MegatronModelMerger(BaseModelMerger):
-    def __init__(self, config: ModelMergerConfig):
-        from verl.utils.megatron_utils import get_hf_config_and_tokenizer_checkpoint_path
+    """
+    Model merger for Megatron-LM distributed checkpoints.
 
-        config.hf_model_config_path = get_hf_config_and_tokenizer_checkpoint_path(config.local_dir)
+    This class handles the conversion of Megatron-LM distributed checkpoints into HuggingFace format.
+    Megatron-LM uses tensor parallelism, pipeline parallelism, and data parallelism to distribute
+    large language models across multiple GPUs. This merger reconstructs the full model by
+    loading distributed checkpoints and applying the necessary transformations.
+
+    Key features:
+    - Support for tensor parallel, pipeline parallel, and data parallel configurations
+    - Automatic parameter name mapping from Megatron to HuggingFace conventions
+    - Handling of QKV and gate-up tensor splitting/merging
+    - Support for tied word embeddings and value models
+    - Integration with Megatron's distributed checkpointing system
+
+    The merger handles various model architectures and configurations:
+    - Standard transformer models (GPT-style)
+    - Models with tied word embeddings
+    - Value models for reinforcement learning
+    - Multi-layer attention (MLA) architectures
+    - Mixture of Experts (MoE) models
+    """
+
+    def __init__(self, config: ModelMergerConfig):
         super().__init__(config)
 
         self.params_mapping = {
@@ -664,15 +883,30 @@ class MegatronModelMerger(BaseModelMerger):
         return state_dict
 
     def merge_and_save(self):
-        from verl.utils.megatron_utils import get_model_checkpoint_path
-
-        model_ckpt_path = get_model_checkpoint_path(self.config.local_dir)
-        sharded_dirs, tp_size, pp_size = self._check_megatron_checkpoint_path(model_ckpt_path)
-        print(f"sharded_dirs: {sharded_dirs}, tp_size: {tp_size}, pp_size: {pp_size}, mp_size: {len(sharded_dirs)}")
-
-        model_state_dict_lst = self._load_state_dicts(model_ckpt_path, sharded_dirs, tp_size, pp_size)
-        merged_state_dict = self._merge_state_dicts(model_state_dict_lst, tp_size, pp_size)
-        del model_state_dict_lst
+        # For standalone script, we need to handle the checkpoint path differently
+        # Since we don't have verl dependencies, we'll use a simplified approach
+        model_ckpt_path = self.config.local_dir
+        
+        # Look for model checkpoints in the directory
+        if not os.path.exists(model_ckpt_path):
+            raise FileNotFoundError(f"Model checkpoint path {model_ckpt_path} does not exist")
+        
+        # Check if it's a distributed checkpoint directory
+        if os.path.exists(os.path.join(model_ckpt_path, "mp_rank_00_000")):
+            # This is a distributed checkpoint
+            sharded_dirs, tp_size, pp_size = self._check_megatron_checkpoint_path(model_ckpt_path)
+            print(f"sharded_dirs: {sharded_dirs}, tp_size: {tp_size}, pp_size: {pp_size}, mp_size: {len(sharded_dirs)}")
+            
+            model_state_dict_lst = self._load_state_dicts(model_ckpt_path, sharded_dirs, tp_size, pp_size)
+            merged_state_dict = self._merge_state_dicts(model_state_dict_lst, tp_size, pp_size)
+            del model_state_dict_lst
+        else:
+            # This might be a single file checkpoint
+            model_file = os.path.join(model_ckpt_path, "model.pt")
+            if os.path.exists(model_file):
+                merged_state_dict = torch.load(model_file, map_location="cpu", weights_only=False)
+            else:
+                raise FileNotFoundError(f"Could not find model checkpoints in {model_ckpt_path}")
 
         if self.config.operation == "test":
             if not self.config.test_hf_dir:
@@ -717,58 +951,16 @@ class MegatronModelMerger(BaseModelMerger):
 
         return None  # Return None if no mapping found
 
+    def cleanup(self):
+        """Cleanup temporary files if needed."""
+        # Megatron merger does not create temporary files, so no cleanup is needed.
+        pass
+
 
 def main():
-    parser = argparse.ArgumentParser(description="verl model merger")
-    subparsers = parser.add_subparsers(dest="operation", required=True, help="Specify 'merge' or 'test' operation.")
-
-    base_op_parser = argparse.ArgumentParser(add_help=False)
-    base_op_parser.add_argument("--backend", type=str, required=True, choices=["fsdp", "megatron"], help="The backend of the model")
-    base_op_parser.add_argument("--local_dir", type=str, required=True, help="Path to the saved model checkpoints")
-    base_op_parser.add_argument("--hf_model_path", type=str, default=None, help="(Deprecated) Path to the original Hugging Face model for config.")
-    base_op_parser.add_argument("--tie-word-embedding", action="store_true", help="Whether to tie word embedding weights (currently only Megatron supported)")
-    base_op_parser.add_argument("--is-value-model", action="store_true", help="Whether the model is a value model (currently only Megatron supported)")
-
-    merge_parser = subparsers.add_parser("merge", parents=[base_op_parser], help="Merge model checkpoints and save.")
-    merge_parser.add_argument("--target_dir", default="huggingface", type=str, help="Directory to save the merged huggingface model")
-    merge_parser.add_argument("--hf_upload_path", default=None, type=str, help="Hugging Face repository ID to upload the model")
-    merge_parser.add_argument("--private", action="store_true", help="Whether to upload the model to a private Hugging Face repository")
-
-    test_parser = subparsers.add_parser("test", parents=[base_op_parser], help="Test merged model against a reference Hugging Face model")
-    test_parser.add_argument("--test_hf_dir", type=str, required=True, help="Path to the reference Hugging Face model directory for testing")
-
-    args = parser.parse_args()
-
-    common_config_args = {
-        "operation": args.operation,
-        "backend": args.backend,
-        "tie_word_embedding": args.tie_word_embedding,
-        "is_value_model": args.is_value_model,
-        "local_dir": args.local_dir,
-        "hf_model_path": args.hf_model_path,
-        "hf_model_config_path": args.local_dir,
-    }
-
-    if args.operation == "merge":
-        config = ModelMergerConfig(
-            **common_config_args,
-            target_dir=args.target_dir,
-            hf_upload_path=args.hf_upload_path,
-            private=args.private,
-            test_hf_dir=None,
-        )
-        os.makedirs(config.target_dir, exist_ok=True)
-    elif args.operation == "test":
-        config = ModelMergerConfig(
-            **common_config_args,
-            test_hf_dir=args.test_hf_dir,
-            # the following args are not used by test operation
-            target_dir=None,
-            hf_upload_path=None,
-            private=False,
-        )
-    else:
-        raise NotImplementedError(f"Unknown operation: {args.operation}")
+    args = parse_args()
+    config = generate_config_from_args(args)
+    print(f"config: {config}")
 
     if config.backend == "fsdp":
         merger = FSDPModelMerger(config)
@@ -778,6 +970,7 @@ def main():
         raise NotImplementedError(f"Unknown backend: {config.backend}")
 
     merger.merge_and_save()
+    merger.cleanup()
 
 
 if __name__ == "__main__":

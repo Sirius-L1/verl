@@ -1,14 +1,14 @@
 #!/bin/bash
 #SBATCH --job-name=ui-verl
-#SBATCH --nodes=1
+#SBATCH --nodes=2
 #SBATCH --ntasks-per-node=1
 #SBATCH --mem=1024G
 #SBATCH --partition=AISS2025031801
 #SBATCH --account=polyullm
 #SBATCH --gpus-per-node=8
 #SBATCH --cpus-per-task=128
-#SBATCH --output=/lustre/projects/polyullm/yuhang/r2/checkpoints/grounding_test_1/enum_v1_no_clip_1/log-%j.out
-#SBATCH --error=/lustre/projects/polyullm/yuhang/r2/checkpoints/grounding_test_1/enum_v1_no_clip_1/log-%j.err
+#SBATCH --output=/lustre/projects/polyullm/yuhang/r2/checkpoints/grounding_test_1/enum_v1_no_clip_1_n16/log-%j.out
+#SBATCH --error=/lustre/projects/polyullm/yuhang/r2/checkpoints/grounding_test_1/enum_v1_no_clip_1_n16/log-%j.err
 
 # set -x
 
@@ -128,7 +128,7 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.rollout.enable_chunked_prefill=False \
     actor_rollout_ref.rollout.enforce_eager=False \
     actor_rollout_ref.rollout.free_cache_engine=False \
-    actor_rollout_ref.rollout.n=8 \
+    actor_rollout_ref.rollout.n=16 \
     actor_rollout_ref.rollout.temperature=1.0 \
     actor_rollout_ref.ref.log_prob_use_dynamic_bsz=False \
     actor_rollout_ref.ref.log_prob_micro_batch_size_per_gpu=4 \
@@ -136,12 +136,12 @@ python3 -m verl.trainer.main_ppo \
     algorithm.use_kl_in_reward=False \
     trainer.logger=['console','wandb'] \
     trainer.project_name='grounding_test_1' \
-    trainer.experiment_name='enum_v1_no_clip_1' \
+    trainer.experiment_name='enum_v1_no_clip_1_n16' \
     trainer.n_gpus_per_node=8 \
     trainer.nnodes=$SLURM_JOB_NUM_NODES \
     trainer.save_freq=32 \
     trainer.test_freq=32 \
-    trainer.total_epochs=3
+    trainer.total_epochs=2
 "
 
 PYTHONUNBUFFERED=1 srun --overlap --nodes=1 --ntasks=1 -w "$head_node" \
